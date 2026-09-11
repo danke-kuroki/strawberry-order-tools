@@ -161,7 +161,7 @@
           <label for="secretInput">連携用の合言葉（Apps Script側のSECRETと同じ文字列）</label>
           <input id="secretInput" placeholder="例：ichigo2026kobetsu">
         </div>
-        <p class="note-line" style="color:var(--amber);">※ この画面（Claude.aiのツール）内では、セキュリティ上の理由により外部サイトへの自動送信が実行できません。動かすには、このファイルをGitHub Pagesなど別の場所でホスティングする必要があります。</p>
+        <p class="note-line hidden" id="hostingNote" style="color:var(--amber);">※ この画面（Claude.aiのツール）内では、セキュリティ上の理由により外部サイトへの自動送信が実行できません。動かすには、このファイルをGitHub Pagesなど別の場所でホスティングする必要があります。</p>
         <p class="note-line hidden" id="webhookStatus"></p>
       </div>
       <table id="ordersTable">
@@ -380,7 +380,7 @@ ${contextText}`;
   }
 
   if(!sheetWebhookUrl) throw new Error("AI連携先が未設定です");
-  const url = sheetWebhookUrl + "?action=parse&secret=" + encodeURIComponent(sheetSecret) + "&prompt=" + encodeURIComponent(prompt);
+  const url = sheetWebhookUrl + "?action=parse&secret=" + encodeURIComponent(sheetSecret) + "&p=" + encodeURIComponent(prompt);
   const response = await fetch(url, { method: "GET" });
   const text = await response.text();
   if(!response.ok){
@@ -627,6 +627,7 @@ document.getElementById("exportBtn").addEventListener("click", () => {
 
 loadOrders();
 loadWebhookUrl();
+if(window.storage){ document.getElementById("hostingNote").classList.remove("hidden"); }
 </script>
 </body>
 </html>

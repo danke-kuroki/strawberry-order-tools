@@ -162,6 +162,23 @@ const PRODUCTS = [
 
 let orders = [];
 
+const storageAdapter = {
+  async get(key, shared){
+    if(window.storage){ return window.storage.get(key, shared); }
+    try{
+      const raw = localStorage.getItem(key);
+      return raw !== null ? { key, value: raw, shared: !!shared } : null;
+    }catch(e){ return null; }
+  },
+  async set(key, value, shared){
+    if(window.storage){ return window.storage.set(key, value, shared); }
+    try{
+      localStorage.setItem(key, value);
+      return { key, value, shared: !!shared };
+    }catch(e){ return null; }
+  }
+};
+
 function populateProductOptions(selectedProduct){
   const select = document.getElementById("productSelect");
   select.innerHTML = PRODUCTS.map(p => `<option value="${p.value}">${p.value}</option>`).join("");
@@ -187,13 +204,13 @@ function todayInfo(){
 
 async function loadOrders(){
   try{
-    const res = await window.storage.get("retail-orders-list", true);
+    const res = await storageAdapter.get("retail-orders-list", true);
     orders = res && res.value ? JSON.parse(res.value) : [];
   }catch(e){ orders = []; }
   renderTable();
 }
 async function saveOrders(){
-  try{ await window.storage.set("retail-orders-list", JSON.stringify(orders), true); }
+  try{ await storageAdapter.set("retail-orders-list", JSON.stringify(orders), true); }
   catch(e){ console.error("保存に失敗しました", e); }
 }
 function escapeHtml(str){

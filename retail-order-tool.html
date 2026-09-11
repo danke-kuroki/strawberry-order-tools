@@ -304,6 +304,20 @@ function renderTable(){
   });
 }
 
+function callViaJsonp(url){
+  return new Promise((resolve, reject) => {
+    const cbName = "aiCallback_" + Date.now() + "_" + Math.floor(Math.random()*100000);
+    const script = document.createElement("script");
+    let settled = false;
+    const cleanup = () => { delete window[cbName]; script.remove(); };
+    window[cbName] = (data) => { settled = true; cleanup(); resolve(data); };
+    script.onerror = () => { if(!settled){ cleanup(); reject(new Error("JSONPリクエストに失敗しました（URLが正しいかご確認ください）")); } };
+    script.src = url + "&callback=" + cbName;
+    document.body.appendChild(script);
+    setTimeout(() => { if(!settled){ cleanup(); reject(new Error("タイムアウトしました（15秒応答なし）")); } }, 15000);
+  });
+}
+
 async function callClaude(contextText){
   const { dateStr, wd } = todayInfo();
   const productList = PRODUCTS.map(p => p.value).join(",");
@@ -328,17 +342,7 @@ ${contextText}`;
 
   if(!sheetWebhookUrl) throw new Error("AI連携先が未設定です");
   const url = sheetWebhookUrl + "?action=parse&secret=" + encodeURIComponent(sheetSecret) + "&p=" + encodeURIComponent(prompt);
-  const response = await fetch(url, { method: "GET" });
-  const text = await response.text();
-  if(!response.ok){
-    throw new Error("HTTP " + response.status + ": " + text.slice(0,150));
-  }
-  const clean = text.replace(/```json|```/g, "").trim();
-  try{
-    return JSON.parse(clean);
-  }catch(parseErr){
-    throw new Error("応答がJSONではありません: " + text.slice(0,150));
-  }
+  return await callViaJsonp(url);
 }
 
 const WEEKDAYS_JA = ["日","月","火","水","木","金","土"];

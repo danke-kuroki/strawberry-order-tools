@@ -358,6 +358,20 @@ function renderTable(){
   });
 }
 
+function callViaJsonp(url){
+  return new Promise((resolve, reject) => {
+    const cbName = "aiCallback_" + Date.now() + "_" + Math.floor(Math.random()*100000);
+    const script = document.createElement("script");
+    let settled = false;
+    const cleanup = () => { delete window[cbName]; script.remove(); };
+    window[cbName] = (data) => { settled = true; cleanup(); resolve(data); };
+    script.onerror = () => { if(!settled){ cleanup(); reject(new Error("JSONPリクエストに失敗しました（URLが正しいかご確認ください）")); } };
+    script.src = url + "&callback=" + cbName;
+    document.body.appendChild(script);
+    setTimeout(() => { if(!settled){ cleanup(); reject(new Error("タイムアウトしました（15秒応答なし）")); } }, 15000);
+  });
+}
+
 async function callClaude(contextText){
   const { dateStr, wd } = todayInfo();
   const prompt = `今日は${dateStr}(${wd}曜)。相対日付(来週の水曜=翌週月火始まりの水曜、来月の3日=来月3日)を正確に計算。品目はあまおう/白いちご。グレードはあまおうならDX,G,2L,L,M,S、白いちごならG,L~S。品目(該当時グレード)・数量・納品日・お客様名が全て確定したらstatus="complete"。未確定が1つでもあれば最重要な1項目だけ短く質問し、選択肢が絞れればoptionsに(2〜3個)、自由記述で良ければnullに。JSONのみ返答:
@@ -381,17 +395,7 @@ ${contextText}`;
 
   if(!sheetWebhookUrl) throw new Error("AI連携先が未設定です");
   const url = sheetWebhookUrl + "?action=parse&secret=" + encodeURIComponent(sheetSecret) + "&p=" + encodeURIComponent(prompt);
-  const response = await fetch(url, { method: "GET" });
-  const text = await response.text();
-  if(!response.ok){
-    throw new Error("HTTP " + response.status + ": " + text.slice(0,150));
-  }
-  const clean = text.replace(/```json|```/g, "").trim();
-  try{
-    return JSON.parse(clean);
-  }catch(parseErr){
-    throw new Error("応答がJSONではありません: " + text.slice(0,150));
-  }
+  return await callViaJsonp(url);
 }
 
 const WEEKDAYS_JA = ["日","月","火","水","木","金","土"];

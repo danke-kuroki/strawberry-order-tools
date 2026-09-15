@@ -368,7 +368,7 @@ function callViaJsonp(url){
     script.onerror = () => { if(!settled){ cleanup(); reject(new Error("JSONPリクエストに失敗しました（URLが正しいかご確認ください）")); } };
     script.src = url + "&callback=" + cbName;
     document.body.appendChild(script);
-    setTimeout(() => { if(!settled){ cleanup(); reject(new Error("タイムアウトしました（15秒応答なし）")); } }, 15000);
+    setTimeout(() => { if(!settled){ cleanup(); reject(new Error("タイムアウトしました（30秒応答なし）")); } }, 30000);
   });
 }
 

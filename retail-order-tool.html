@@ -132,6 +132,7 @@
         </div>
       </div>
       <button class="btn-primary" id="addBtn">この内容で追加する</button>
+      <p class="note-line hidden" id="orderConfirmMsg" style="color:var(--leaf); font-weight:500;"></p>
     </section>
 
     <section class="list-panel">
@@ -632,6 +633,10 @@ document.getElementById("addBtn").addEventListener("click", async () => {
   orders.push(order);
   await saveOrders();
   renderTable();
+
+  const confirmMsg = document.getElementById("orderConfirmMsg");
+  confirmMsg.textContent = "ご注文ありがとうございます。対応可能かどうかを24時間以内に返信いたしますので、しばしお待ちください。";
+  confirmMsg.classList.remove("hidden");
 
   document.getElementById("rawText").value = "";
   document.getElementById("qtyInput").value = "";

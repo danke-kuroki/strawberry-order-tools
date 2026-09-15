@@ -407,10 +407,10 @@ function isRetailComplete(p){
   return !!(p.product && p.quantity && p.order_date && p.customer_name);
 }
 function nextMissingRetail(p){
-  if(!p.product) return { field: "product", question: "商品は何にしますか？", options: PRODUCTS.map(x=>x.value) };
-  if(!p.quantity) return { field: "quantity", question: "数量はいくつですか？", options: null };
-  if(!p.order_date) return { field: "order_date", question: "お届け希望日はいつですか？", options: null };
-  if(!p.customer_name) return { field: "customer_name", question: "お客様のお名前を教えてください。", options: null };
+  if(!p.product) return { field: "product", question: "商品は何にしますか？", choices: PRODUCTS.map(x=>({label:x.value, value:x.value})) };
+  if(!p.quantity) return { field: "quantity", question: "数量はいくつですか？", choices: null };
+  if(!p.order_date) return { field: "order_date", question: "お届け希望日はいつですか？", choices: null };
+  if(!p.customer_name) return { field: "customer_name", question: "お客様のお名前を教えてください。", choices: null };
   return null;
 }
 function mergeKnown(base, incoming){
@@ -462,16 +462,39 @@ function applyParsedToForm(parsed){
   if(parsed.customer_name){ document.getElementById("customerInput").value = parsed.customer_name; }
 }
 
-function renderQuickReplies(options){
+function renderQuickReplies(choices){
   const wrap = document.getElementById("quickReplies");
   wrap.innerHTML = "";
-  (options || []).forEach(label => {
+  (choices || []).forEach(choice => {
     const btn = document.createElement("button");
     btn.className = "quick-reply-btn";
-    btn.textContent = label;
-    btn.addEventListener("click", () => sendChatAnswer(label));
+    btn.textContent = choice.label;
+    btn.addEventListener("click", () => resolveFieldLocally(choice.value, choice.label));
     wrap.appendChild(btn);
   });
+}
+
+function presentMissingOrDone(){
+  const missing = nextMissingRetail(knownFields);
+  if(missing){
+    appendBubble("assistant", missing.question);
+    renderQuickReplies(missing.choices);
+    document.getElementById("chatInputRow").classList.remove("hidden");
+    document.getElementById("chatReplyInput").value = "";
+  }else{
+    applyParsedToForm(knownFields);
+    appendBubble("assistant", "内容を確認しました。フォームの内容をご確認のうえ「この内容で追加する」を押してください。");
+    document.getElementById("chatInputRow").classList.add("hidden");
+  }
+}
+
+function resolveFieldLocally(value, label){
+  appendBubble("user", label);
+  const missing = nextMissingRetail(knownFields);
+  if(missing){ knownFields[missing.field] = value; }
+  document.getElementById("quickReplies").innerHTML = "";
+  document.getElementById("chatInputRow").classList.add("hidden");
+  presentMissingOrDone();
 }
 
 async function runClarificationStep(){
@@ -480,17 +503,7 @@ async function runClarificationStep(){
   try{
     const parsed = await callClaude(contextLog.join("\n"));
     knownFields = mergeKnown(knownFields, parsed);
-    const missing = nextMissingRetail(knownFields);
-    if(missing){
-      appendBubble("assistant", missing.question);
-      renderQuickReplies(missing.options);
-      document.getElementById("chatInputRow").classList.remove("hidden");
-      document.getElementById("chatReplyInput").value = "";
-    }else{
-      applyParsedToForm(knownFields);
-      appendBubble("assistant", "内容を確認しました。フォームの内容をご確認のうえ「この内容で追加する」を押してください。");
-      document.getElementById("chatInputRow").classList.add("hidden");
-    }
+    presentMissingOrDone();
   }catch(e){
     errorBox.textContent = "自動での読み取りに失敗しました。下の項目を直接選択・入力してください。[詳細: " + (e && e.message ? e.message : e) + "]";
     errorBox.classList.remove("hidden");

@@ -87,15 +87,14 @@
     </svg>
     <div>
       <h1>卸販売受注ツール</h1>
-      <p>品目・グレード・数量を選んで登録します。単位はグレードに応じて自動表示されます。</p>
     </div>
   </header>
 
   <main>
     <section class="input-panel">
       <div class="field">
-        <label for="rawText">注文メモ（貼り付けると自動入力できます・任意）</label>
-        <textarea id="rawText" placeholder="例：来週の水曜、あまおうGを10単位でお願いします"></textarea>
+        <label for="rawText">ご注文をお聞かせください。</label>
+        <textarea id="rawText" placeholder="例：あまおうGを10パックお願いします。"></textarea>
       </div>
       <button class="btn-ghost" id="autofillBtn">メモから自動入力</button>
       <div id="errorBox" class="error-box hidden"></div>
@@ -152,19 +151,8 @@
         <h2>卸受注一覧</h2>
         <button class="btn-ghost btn-small" id="exportBtn">CSVで書き出す</button>
       </div>
-      <div class="field">
-        <label for="webhookInput">スプレッドシート連携URL（Apps ScriptのウェブアプリURL）</label>
-        <div class="row2">
-          <input id="webhookInput" placeholder="https://script.google.com/macros/s/.../exec">
-          <button class="btn-ghost btn-small" id="saveWebhookBtn" style="width:auto;">保存</button>
-        </div>
-        <div class="field" style="margin-top:8px;">
-          <label for="secretInput">連携用の合言葉（Apps Script側のSECRETと同じ文字列）</label>
-          <input id="secretInput" placeholder="例：ichigo2026kobetsu">
-        </div>
-        <p class="note-line hidden" id="hostingNote" style="color:var(--amber);">※ この画面（Claude.aiのツール）内では、セキュリティ上の理由により外部サイトへの自動送信が実行できません。動かすには、このファイルをGitHub Pagesなど別の場所でホスティングする必要があります。</p>
-        <p class="note-line hidden" id="webhookStatus"></p>
-      </div>
+      <p class="note-line hidden" id="hostingNote" style="color:var(--amber);">※ この画面（Claude.aiのツール）内では、セキュリティ上の理由により外部サイトへの自動送信が実行できません。動かすには、このファイルをGitHub Pagesなど別の場所でホスティングする必要があります。</p>
+      <p class="note-line hidden" id="webhookStatus"></p>
       <table id="ordersTable">
         <thead>
           <tr><th>内容確認</th><th>データ追加日</th><th>お客様名</th><th>グレード</th><th>数量</th><th>納品日</th><th>元メモ</th><th></th></tr>
@@ -193,8 +181,6 @@ const GRADES = {
 };
 
 let orders = [];
-let sheetWebhookUrl = "";
-let sheetSecret = "";
 
 const storageAdapter = {
   async get(key, shared){
@@ -213,40 +199,11 @@ const storageAdapter = {
   }
 };
 
-async function loadWebhookUrl(){
-  try{
-    const res = await storageAdapter.get("wholesale-sheet-webhook", true);
-    sheetWebhookUrl = res && res.value ? res.value : "";
-  }catch(e){ sheetWebhookUrl = ""; }
-  document.getElementById("webhookInput").value = sheetWebhookUrl;
-  try{
-    const res2 = await storageAdapter.get("wholesale-sheet-secret", true);
-    sheetSecret = res2 && res2.value ? res2.value : "";
-  }catch(e){ sheetSecret = ""; }
-  document.getElementById("secretInput").value = sheetSecret;
-}
-
-document.getElementById("saveWebhookBtn").addEventListener("click", async () => {
-  const url = document.getElementById("webhookInput").value.trim();
-  const secret = document.getElementById("secretInput").value.trim();
-  const status = document.getElementById("webhookStatus");
-  try{
-    await storageAdapter.set("wholesale-sheet-webhook", url, true);
-    await storageAdapter.set("wholesale-sheet-secret", secret, true);
-    sheetWebhookUrl = url;
-    sheetSecret = secret;
-    status.textContent = url ? "保存しました。以降、追加した注文は自動でスプレッドシートに書き込まれます。" : "連携を解除しました。";
-    status.classList.remove("hidden");
-  }catch(e){
-    status.textContent = "保存に失敗しました。もう一度お試しください。";
-    status.classList.remove("hidden");
-  }
-});
+const SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyh5Iv-IFrNvFVHTfroqSJG_6az2Pdc08Hqud5cwLPpiawSwntuHj3DA8QBp3faVNkW/exec";
 
 async function syncToSheet(order){
-  if(!sheetWebhookUrl) return { status: "skipped" };
   try{
-    const url = sheetWebhookUrl + "?action=add&secret=" + encodeURIComponent(sheetSecret)
+    const url = SHEET_WEBHOOK_URL + "?action=add"
       + "&createdAt=" + encodeURIComponent(order.createdAt || "")
       + "&customerName=" + encodeURIComponent(order.customerName || "")
       + "&item=" + encodeURIComponent(order.item || "")
@@ -398,8 +355,7 @@ ${contextText}`;
     return JSON.parse(clean);
   }
 
-  if(!sheetWebhookUrl) throw new Error("AI連携先が未設定です");
-  const url = sheetWebhookUrl + "?action=parse&secret=" + encodeURIComponent(sheetSecret) + "&p=" + encodeURIComponent(prompt);
+  const url = SHEET_WEBHOOK_URL + "?action=parse&p=" + encodeURIComponent(prompt);
   return await callViaJsonp(url);
 }
 
@@ -736,20 +692,18 @@ document.getElementById("addBtn").addEventListener("click", async () => {
   confirmMsg.classList.remove("hidden");
 
   const webhookStatus = document.getElementById("webhookStatus");
-  if(sheetWebhookUrl){
-    webhookStatus.textContent = "スプレッドシートに書き込み中...";
+  webhookStatus.textContent = "スプレッドシートに書き込み中...";
+  webhookStatus.style.color = "var(--leaf)";
+  webhookStatus.classList.remove("hidden");
+  const syncResult = await syncToSheet(order);
+  if(syncResult && syncResult.status === "ok"){
+    webhookStatus.textContent = "✓ スプレッドシートに書き込みました。";
     webhookStatus.style.color = "var(--leaf)";
-    webhookStatus.classList.remove("hidden");
-    const syncResult = await syncToSheet(order);
-    if(syncResult && syncResult.status === "ok"){
-      webhookStatus.textContent = "✓ スプレッドシートに書き込みました。";
-      webhookStatus.style.color = "var(--leaf)";
-    }else{
-      webhookStatus.textContent = "✗ スプレッドシートへの書き込みに失敗しました: " + (syncResult && (syncResult.message || syncResult.status) || "不明なエラー");
-      webhookStatus.style.color = "var(--amber)";
-    }
-    webhookStatus.classList.remove("hidden");
+  }else{
+    webhookStatus.textContent = "✗ スプレッドシートへの書き込みに失敗しました: " + (syncResult && (syncResult.message || syncResult.status) || "不明なエラー");
+    webhookStatus.style.color = "var(--amber)";
   }
+  webhookStatus.classList.remove("hidden");
 
   document.getElementById("rawText").value = "";
   document.getElementById("qtyInput").value = "";
@@ -769,7 +723,6 @@ document.getElementById("exportBtn").addEventListener("click", () => {
 });
 
 loadOrders();
-loadWebhookUrl();
 if(window.storage){ document.getElementById("hostingNote").classList.remove("hidden"); }
 </script>
 </body>

@@ -314,7 +314,7 @@ function callViaJsonp(url){
     script.onerror = () => { if(!settled){ cleanup(); reject(new Error("JSONPリクエストに失敗しました（URLが正しいかご確認ください）")); } };
     script.src = url + "&callback=" + cbName;
     document.body.appendChild(script);
-    setTimeout(() => { if(!settled){ cleanup(); reject(new Error("タイムアウトしました（30秒応答なし）")); } }, 30000);
+    setTimeout(() => { if(!settled){ cleanup(); reject(new Error("タイムアウトしました（60秒応答なし）")); } }, 60000);
   });
 }
 
@@ -535,10 +535,16 @@ document.getElementById("autofillBtn").addEventListener("click", async () => {
 
   const btn = document.getElementById("autofillBtn");
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>読み取り中...';
+  let elapsed = 0;
+  btn.innerHTML = '<span class="spinner"></span>読み取り中...(0秒)';
+  const timerHandle = setInterval(() => {
+    elapsed++;
+    btn.innerHTML = '<span class="spinner"></span>読み取り中...(' + elapsed + '秒)';
+  }, 1000);
   try{
     await runClarificationStep();
   }finally{
+    clearInterval(timerHandle);
     btn.disabled = false;
     btn.textContent = "メモから自動入力";
   }

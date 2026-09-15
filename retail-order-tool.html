@@ -357,7 +357,8 @@ function weekdayDate(now, wdChar, nextWeek){
   const base = nextWeek ? new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 7) : thisMonday;
   return new Date(base.getFullYear(), base.getMonth(), base.getDate() + mondayBased);
 }
-function parseDateLocal(text){
+function parseDateLocal(rawText){
+  const text = toHalfWidthDigits(rawText);
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   let mm;
@@ -391,8 +392,11 @@ function parseDateLocal(text){
   }
   return null;
 }
+function toHalfWidthDigits(str){
+  return str.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
 function parseQuantityLocal(text){
-  const m = text.match(/(\d+)\s*(パック|箱|個|カップ)?/);
+  const m = toHalfWidthDigits(text).match(/(\d+)\s*(パック|箱|個|カップ)?/);
   return m ? parseInt(m[1],10) : null;
 }
 function parseCustomerLocal(text){

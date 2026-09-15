@@ -243,17 +243,21 @@ document.getElementById("saveWebhookBtn").addEventListener("click", async () => 
 });
 
 async function syncToSheet(order){
-  if(!sheetWebhookUrl) return;
+  if(!sheetWebhookUrl) return { status: "skipped" };
   try{
-    await fetch(sheetWebhookUrl, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify({ ...order, secret: sheetSecret })
-    });
+    const url = sheetWebhookUrl + "?action=add&secret=" + encodeURIComponent(sheetSecret)
+      + "&createdAt=" + encodeURIComponent(order.createdAt || "")
+      + "&customerName=" + encodeURIComponent(order.customerName || "")
+      + "&item=" + encodeURIComponent(order.item || "")
+      + "&grade=" + encodeURIComponent(order.grade || "")
+      + "&quantity=" + encodeURIComponent(order.quantity || "")
+      + "&orderDate=" + encodeURIComponent(order.orderDate || "")
+      + "&rawText=" + encodeURIComponent(order.rawText || "");
+    return await callViaJsonp(url);
   }catch(e){
     // Claude.aiのアーティファクト内では外部サイトへの通信がブロックされるため、
-    // ここで失敗するのは想定内。コンソールには出さず、静かに諦める。
+    // ここで失敗するのは想定内。
+    return { status: "error", message: e.message };
   }
 }
 
@@ -410,7 +414,8 @@ function weekdayDate(now, wdChar, nextWeek){
   const base = nextWeek ? new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() + 7) : thisMonday;
   return new Date(base.getFullYear(), base.getMonth(), base.getDate() + mondayBased);
 }
-function parseDateLocal(text){
+function parseDateLocal(rawText){
+  const text = toHalfWidthDigits(rawText);
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   let mm;
@@ -452,8 +457,11 @@ function matchGradeFromText(item, text){
   }
   return null;
 }
+function toHalfWidthDigits(str){
+  return str.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+}
 function parseQuantityLocal(text){
-  const m = text.match(/(\d+)\s*(パック|箱|個|kg|単位)?/);
+  const m = toHalfWidthDigits(text).match(/(\d+)\s*(パック|箱|個|kg|単位)?/);
   return m ? parseInt(m[1],10) : null;
 }
 function parseCustomerLocal(text){
@@ -720,8 +728,23 @@ document.getElementById("addBtn").addEventListener("click", async () => {
   };
   orders.push(order);
   await saveOrders();
-  syncToSheet(order);
   renderTable();
+
+  const webhookStatus = document.getElementById("webhookStatus");
+  if(sheetWebhookUrl){
+    webhookStatus.textContent = "スプレッドシートに書き込み中...";
+    webhookStatus.style.color = "var(--leaf)";
+    webhookStatus.classList.remove("hidden");
+    const syncResult = await syncToSheet(order);
+    if(syncResult && syncResult.status === "ok"){
+      webhookStatus.textContent = "✓ スプレッドシートに書き込みました。";
+      webhookStatus.style.color = "var(--leaf)";
+    }else{
+      webhookStatus.textContent = "✗ スプレッドシートへの書き込みに失敗しました: " + (syncResult && (syncResult.message || syncResult.status) || "不明なエラー");
+      webhookStatus.style.color = "var(--amber)";
+    }
+    webhookStatus.classList.remove("hidden");
+  }
 
   document.getElementById("rawText").value = "";
   document.getElementById("qtyInput").value = "";

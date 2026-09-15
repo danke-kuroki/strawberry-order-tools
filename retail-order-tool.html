@@ -426,6 +426,22 @@ function mergeKnown(base, incoming){
 
 let contextLog = [];
 let knownFields = { product: null, quantity: null, order_date: null, customer_name: null };
+let originalMemo = "";
+
+function summarizeKnown(p){
+  const parts = [];
+  if(p.product) parts.push("商品=" + p.product);
+  if(p.quantity) parts.push("数量=" + p.quantity);
+  if(p.order_date) parts.push("お届け日=" + p.order_date);
+  if(p.customer_name) parts.push("お客様名=" + p.customer_name);
+  return parts.join(", ");
+}
+function rebuildContextLog(latestAnswer){
+  contextLog = ["元のメモ: " + originalMemo];
+  const summary = summarizeKnown(knownFields);
+  if(summary) contextLog.push("(既に分かっている項目: " + summary + ")");
+  if(latestAnswer) contextLog.push("最新の回答: " + latestAnswer);
+}
 
 function appendBubble(role, text){
   const log = document.getElementById("chatLog");
@@ -467,7 +483,6 @@ async function runClarificationStep(){
     const missing = nextMissingRetail(knownFields);
     if(missing){
       appendBubble("assistant", missing.question);
-      contextLog.push("Q: " + missing.question + (missing.options ? "（選択肢: " + missing.options.join(" / ") + "）" : ""));
       renderQuickReplies(missing.options);
       document.getElementById("chatInputRow").classList.remove("hidden");
       document.getElementById("chatReplyInput").value = "";
@@ -486,7 +501,7 @@ async function runClarificationStep(){
 async function sendChatAnswer(text){
   if(!text) return;
   appendBubble("user", text);
-  contextLog.push("A: " + text);
+  rebuildContextLog(text);
   document.getElementById("quickReplies").innerHTML = "";
   document.getElementById("chatInputRow").classList.add("hidden");
   appendBubble("assistant", "…確認しています");
@@ -525,13 +540,8 @@ document.getElementById("autofillBtn").addEventListener("click", async () => {
     return;
   }
 
-  const hints = [];
-  if(local.product) hints.push("商品: " + local.product);
-  if(local.quantity) hints.push("数量: " + local.quantity);
-  if(local.order_date) hints.push("お届け日: " + local.order_date);
-  if(local.customer_name) hints.push("お客様名: " + local.customer_name);
-  contextLog = ["元のメモ: " + raw];
-  if(hints.length) contextLog.push("(すでに読み取れた項目: " + hints.join(", ") + ")");
+  originalMemo = raw;
+  rebuildContextLog(null);
 
   const btn = document.getElementById("autofillBtn");
   btn.disabled = true;

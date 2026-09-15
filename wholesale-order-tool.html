@@ -374,8 +374,8 @@ function callViaJsonp(url){
 
 async function callClaude(contextText){
   const { dateStr, wd } = todayInfo();
-  const prompt = `今日は${dateStr}(${wd}曜)。相対日付(来週の水曜=翌週月火始まりの水曜、来月の3日=来月3日)を正確に計算。品目はあまおう/白いちご。グレードはあまおうならDX,G,2L,L,M,S、白いちごならG,L~S。品目(該当時グレード)・数量・納品日・お客様名が全て確定したらstatus="complete"。未確定が1つでもあれば最重要な1項目だけ短く質問し、選択肢が絞れればoptionsに(2〜3個)、自由記述で良ければnullに。JSONのみ返答:
-{"order_date":"YYYY-MM-DD or null","item":"or null","grade":"or null","quantity":number or null,"customer_name":"or null","status":"complete or needs_clarification","question":"or null","options":array or null,"note":"or null"}
+  const prompt = `今日は${dateStr}(${wd}曜)。相対日付(来週の水曜=翌週月火始まりの水曜、来月の3日=来月3日)を正確に計算。品目はあまおう/白いちご。グレードはあまおうならDX,G,2L,L,M,S、白いちごならG,L~S。以下のやり取り全体から、分かる範囲で情報を抽出してください。書かれていない・断定できない項目は必ずnullにしてください（推測で埋めないでください）。JSONのみ返答:
+{"order_date":"YYYY-MM-DD or null","item":"or null","grade":"or null","quantity":number or null,"customer_name":"or null"}
 
 やり取り:
 ${contextText}`;
@@ -471,8 +471,36 @@ function isWholesaleComplete(p){
   const validGrades = (GRADES[p.item]||[]).map(g=>g.value);
   return validGrades.includes(p.grade);
 }
+function nextMissingWholesale(p){
+  if(!p.item) return { field: "item", question: "品目はどちらですか？", options: ["あまおう","白いちご"] };
+  const gradeList = GRADES[p.item] || [];
+  const validGrades = gradeList.map(g=>g.value);
+  if(!validGrades.includes(p.grade)){
+    return { field: "grade", question: "どの規格ですか？", options: gradeList.map(g => g.value + "（" + g.unit + "）") };
+  }
+  if(!p.quantity) return { field: "quantity", question: "数量はいくつですか？", options: null };
+  if(!p.order_date) return { field: "order_date", question: "納品希望日はいつですか？", options: null };
+  if(!p.customer_name) return { field: "customer_name", question: "お客様のお名前を教えてください。", options: null };
+  return null;
+}
+function mergeKnown(base, incoming){
+  const merged = { ...base };
+  for(const key of ["item","grade","quantity","order_date","customer_name"]){
+    const v = incoming[key];
+    if(v !== null && v !== undefined && v !== ""){
+      merged[key] = v;
+    }
+  }
+  // 品目が変わったら、対応しないグレードは破棄する
+  if(merged.item && merged.grade){
+    const validGrades = (GRADES[merged.item]||[]).map(g=>g.value);
+    if(!validGrades.includes(merged.grade)) merged.grade = null;
+  }
+  return merged;
+}
 
 let contextLog = [];
+let knownFields = { item: null, grade: null, quantity: null, order_date: null, customer_name: null };
 
 function appendBubble(role, text){
   const log = document.getElementById("chatLog");
@@ -511,20 +539,18 @@ async function runClarificationStep(){
   errorBox.classList.add("hidden");
   try{
     const parsed = await callClaude(contextLog.join("\n"));
-    if(parsed.status === "needs_clarification"){
-      appendBubble("assistant", parsed.question);
-      contextLog.push("Q: " + parsed.question + (parsed.options ? "（選択肢: " + parsed.options.join(" / ") + "）" : ""));
-      renderQuickReplies(parsed.options);
+    knownFields = mergeKnown(knownFields, parsed);
+    const missing = nextMissingWholesale(knownFields);
+    if(missing){
+      appendBubble("assistant", missing.question);
+      contextLog.push("Q: " + missing.question + (missing.options ? "（選択肢: " + missing.options.join(" / ") + "）" : ""));
+      renderQuickReplies(missing.options);
       document.getElementById("chatInputRow").classList.remove("hidden");
       document.getElementById("chatReplyInput").value = "";
     }else{
-      applyParsedToForm(parsed);
+      applyParsedToForm(knownFields);
       appendBubble("assistant", "内容を確認しました。フォームの内容をご確認のうえ「この内容で追加する」を押してください。");
       document.getElementById("chatInputRow").classList.add("hidden");
-      if(parsed.note){
-        errorBox.textContent = "※ " + parsed.note;
-        errorBox.classList.remove("hidden");
-      }
     }
   }catch(e){
     errorBox.textContent = "自動での読み取りに失敗しました。下の項目を直接選択・入力してください。[詳細: " + (e && e.message ? e.message : e) + "]";
@@ -568,6 +594,7 @@ document.getElementById("autofillBtn").addEventListener("click", async () => {
   appendBubble("user", raw);
 
   const local = localParse(raw);
+  knownFields = { item: local.item, grade: local.grade, quantity: local.quantity, order_date: local.order_date, customer_name: local.customer_name };
   if(isWholesaleComplete(local)){
     applyParsedToForm(local);
     appendBubble("assistant", "内容を確認しました（自動読み取り）。フォームの内容をご確認のうえ「この内容で追加する」を押してください。");

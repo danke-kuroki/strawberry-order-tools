@@ -431,6 +431,25 @@ function parseDateLocal(text){
     if(dt < new Date(y,m,d)) dt = new Date(y,m+1,day);
     return fmtDate(dt);
   }
+  if(mm = text.match(/(\d{1,2})\/(\d{1,2})/)){
+    let dt = new Date(y, parseInt(mm[1],10)-1, parseInt(mm[2],10));
+    if(dt < new Date(y,m,d)) dt.setFullYear(y+1);
+    return fmtDate(dt);
+  }
+  if(mm = text.match(/^\s*(\d{1,2})日\s*$/)){
+    let day = parseInt(mm[1],10);
+    let dt = new Date(y,m,day);
+    if(dt < new Date(y,m,d)) dt = new Date(y,m+1,day);
+    return fmtDate(dt);
+  }
+  return null;
+}
+function matchGradeFromText(item, text){
+  const list = (GRADES[item]||[]).map(g=>g.value).sort((a,b)=>b.length-a.length);
+  for(const code of list){
+    const re = new RegExp("(^|[^A-Za-z0-9])" + code.replace("~","\\~") + "([^A-Za-z0-9]|$)", "i");
+    if(re.test(text)) return code;
+  }
   return null;
 }
 function parseQuantityLocal(text){
@@ -589,12 +608,47 @@ async function runClarificationStep(){
   }
 }
 
+function tryResolveLocally(field, text){
+  if(field === "item"){
+    if(/白いちご/.test(text)) return "白いちご";
+    if(/あまおう/.test(text)) return "あまおう";
+    return null;
+  }
+  if(field === "grade"){
+    return matchGradeFromText(knownFields.item, text);
+  }
+  if(field === "quantity"){
+    return parseQuantityLocal(text);
+  }
+  if(field === "order_date"){
+    return parseDateLocal(text);
+  }
+  if(field === "customer_name"){
+    const m = parseCustomerLocal(text);
+    if(m) return m;
+    const trimmed = text.trim();
+    return (trimmed.length > 0 && trimmed.length <= 15) ? trimmed : null;
+  }
+  return null;
+}
+
 async function sendChatAnswer(text){
   if(!text) return;
+  const missing = nextMissingWholesale(knownFields);
+  const field = missing ? missing.field : null;
+  const resolved = field ? tryResolveLocally(field, text) : null;
+
   appendBubble("user", text);
-  rebuildContextLog(text);
   document.getElementById("quickReplies").innerHTML = "";
   document.getElementById("chatInputRow").classList.add("hidden");
+
+  if(resolved !== null && resolved !== undefined && resolved !== ""){
+    knownFields[field] = resolved;
+    presentMissingOrDone();
+    return;
+  }
+
+  rebuildContextLog(text);
   appendBubble("assistant", "…確認しています");
   await runClarificationStep();
   const log = document.getElementById("chatLog");
